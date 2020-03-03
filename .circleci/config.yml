@@ -1137,7 +1137,19 @@ jobs:
               echo "Build failed with exit code: ${RETURN}"
               exit ${RETURN}
           fi
-        no_output_timeout: 15m
+
+
+          # Test: run flaky test in loop
+          for ((i = 0 ; i < 200 ; i++)); do
+            ant testsome -Dtest.name=org.apache.cassandra.index.internal.CassandraIndexTest -Dtest.methods=indexCorrectlyMarkedAsBuildAndRemoved;
+            if [[ "$?" -ne '0' ]]; then
+              echo "Reproduced"
+              break
+            fi
+          done
+
+
+        no_output_timeout: 55m
     - run:
         name: Run eclipse-warnings
         command: |
