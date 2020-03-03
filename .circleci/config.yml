@@ -1141,7 +1141,7 @@ jobs:
 
           # Test: run flaky test in loop
           for ((i = 0 ; i < 200 ; i++)); do
-            ant testsome -Dtest.name=org.apache.cassandra.index.internal.CassandraIndexTest -Dtest.methods=indexCorrectlyMarkedAsBuildAndRemoved;
+            ant test -Dtest.name=CassandraIndexTest;
             if [[ "$?" -ne '0' ]]; then
               echo "Reproduced"
               break
