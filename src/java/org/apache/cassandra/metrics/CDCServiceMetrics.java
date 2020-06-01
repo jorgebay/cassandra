@@ -10,7 +10,7 @@ import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
  */
 public final class CDCServiceMetrics
 {
-    private static final MetricNameFactory factory = new DefaultNameFactory("CDCService");
+    public static final MetricNameFactory factory = new DefaultNameFactory("CDCService");
 
     public static final Meter hintsCreated = Metrics.meter(factory.createMetricName("HintsCreated"));
     public static final Meter hintsNotCreated = Metrics.meter(factory.createMetricName("HintsNotCreated"));

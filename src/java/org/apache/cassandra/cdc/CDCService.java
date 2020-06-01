@@ -27,6 +27,7 @@ public final class CDCService
     private static final String MBEAN_NAME = "org.apache.cassandra.cdc:type=CDCService";
     private static final long logTimePeriod = TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS);
 
+    private final CDCConfig config;
     private final CDCProducer producer;
     private final CDCHealthCheckService healthCheck;
     private final CDCHintService hintService;
@@ -35,15 +36,9 @@ public final class CDCService
     private final AtomicLong lastLatencyLogTime = new AtomicLong();
     private final AtomicLong latencyLogCounter = new AtomicLong();
 
-    // TODO: Use conf
-    private static final int MAX_HINTS = 100;
-    private static final boolean USE_HINTS = true;
-    private static final double MAX_FAILURE_RATIO = 0.3;
-    private static final long LATENCY_ERROR_MS = 1000;
-    private static final long LATENCY_WARNING_NANOS = 100_1000_1000L;
-
-    CDCService(CDCProducer producer, CDCHealthCheckService healthCheck, CDCHintService hintService)
+    CDCService(CDCConfig config, CDCProducer producer, CDCHealthCheckService healthCheck, CDCHintService hintService)
     {
+        this.config = config;
         this.producer = producer;
         this.healthCheck = healthCheck;
         this.hintService = hintService;
@@ -51,13 +46,12 @@ public final class CDCService
 
     public void init() throws IOException
     {
+        registerMBean();
+
         try
         {
-            registerMBean();
-
-            producer.init(Collections.emptyMap()).get();
-            healthCheck.init(MAX_FAILURE_RATIO, this::onStateChanged, this::getFailureRatio);
-            hintService.init(producer, healthCheck);
+            //TODO: pass options
+            producer.init(Collections.emptyMap(), CDCServiceMetrics.factory).get();
         }
         catch (InterruptedException e)
         {
@@ -68,6 +62,8 @@ public final class CDCService
             throw new IOException("CDC Producer could not be initialized", e);
         }
 
+        healthCheck.init(config.getMaxFailureRatio(), this::onStateChanged, this::getFailureRatio);
+        hintService.init(producer, healthCheck);
         stateInstant = State.OK;
     }
 
@@ -120,7 +116,7 @@ public final class CDCService
             healthCheck.reportSendError(mutation, ex);
         }
 
-        if (!USE_HINTS)
+        if (!config.useHints())
         {
             throw new CDCWriteException("CDC Producer failed to acknowledge the mutation");
         }
@@ -128,7 +124,7 @@ public final class CDCService
         if (!hintService.storeHint(mutation))
         {
             // Hints failed to be stored
-            throw new CDCWriteException(String.format("CDC Service failure after %s hints stored", MAX_HINTS));
+            throw new CDCWriteException(String.format("CDC Service failure after %s hints stored", config.getMaxHints()));
         }
     }
 
@@ -144,7 +140,7 @@ public final class CDCService
         try
         {
             CompletableFuture<Void> future = producer.send(mutation, DefaultMutationCDCInfo.clientRequestInfo);
-            future.get(LATENCY_ERROR_MS, TimeUnit.MILLISECONDS);
+            future.get(config.getLatencyErrorMs(), TimeUnit.MILLISECONDS);
             long latencyNanos = System.nanoTime() - start;
             CDCServiceMetrics.producerLatency.addNano(latencyNanos);
             maybeLogLatency(latencyNanos);
@@ -173,23 +169,25 @@ public final class CDCService
 
     private void maybeLogLatency(long latencyNanos)
     {
-        if (latencyNanos < LATENCY_WARNING_NANOS)
+        if (latencyNanos < config.getLatencyWarningNanos())
         {
             return;
         }
 
+        // Log from time to time
         long lastLog = lastLatencyLogTime.get();
         long now = System.currentTimeMillis();
 
         if (lastLog + logTimePeriod < now && lastLatencyLogTime.compareAndSet(lastLog, now))
         {
+            String message = String.format("CDC Producer took %dms (warn threshold is %dms)",
+                                           TimeUnit.MILLISECONDS.convert(latencyNanos, TimeUnit.NANOSECONDS),
+                                           TimeUnit.MILLISECONDS.convert(config.getLatencyWarningNanos(),
+                                                                         TimeUnit.NANOSECONDS));
             long count = latencyLogCounter.getAndSet(0L);
-            long latencyMillis = TimeUnit.MILLISECONDS.convert(latencyNanos, TimeUnit.NANOSECONDS);
-            String message = String.format("CDC Producer took %dms (warn threshold is %dms)", latencyMillis,
-                                           LATENCY_WARNING_NANOS);
             if (count > 0)
             {
-                message += String.format(", while recording other %d mutations also exceeded the threshold", count);
+                message += String.format(", %d mutations also exceeded the threshold since last warning", count);
             }
             logger.warn(message);
         }
