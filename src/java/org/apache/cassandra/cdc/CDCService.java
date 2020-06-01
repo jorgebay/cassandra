@@ -21,11 +21,10 @@ import org.apache.cassandra.utils.MBeanWrapper;
  *
  * Wraps the {@link CDCProducer}, adding error handling and metrics.
  */
-public final class CDCService
+public final class CDCService implements CDCServiceMBean
 {
     private static final Logger logger = LoggerFactory.getLogger(CDCService.class);
     private static final String MBEAN_NAME = "org.apache.cassandra.cdc:type=CDCService";
-    private static final long logTimePeriod = TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS);
 
     private final CDCConfig config;
     private final CDCProducer producer;
@@ -155,10 +154,17 @@ public final class CDCService
             CDCServiceMetrics.producerLatency.addNano(System.nanoTime() - start);
             return e;
         }
-        catch (Exception e)
+        catch (ExecutionException|InterruptedException e)
         {
             CDCServiceMetrics.producerFailures.mark();
             CDCServiceMetrics.producerLatency.addNano(System.nanoTime() - start);
+
+            if (e.getCause() instanceof Exception)
+            {
+                // Try to unwrap
+                return (Exception) e.getCause();
+            }
+
             return e;
         }
         finally
@@ -178,7 +184,7 @@ public final class CDCService
         long lastLog = lastLatencyLogTime.get();
         long now = System.currentTimeMillis();
 
-        if (lastLog + logTimePeriod < now && lastLatencyLogTime.compareAndSet(lastLog, now))
+        if (lastLog + config.getLogTimePeriodMs() < now && lastLatencyLogTime.compareAndSet(lastLog, now))
         {
             String message = String.format("CDC Producer took %dms (warn threshold is %dms)",
                                            TimeUnit.MILLISECONDS.convert(latencyNanos, TimeUnit.NANOSECONDS),

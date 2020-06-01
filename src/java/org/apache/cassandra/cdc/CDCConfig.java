@@ -14,4 +14,6 @@ interface CDCConfig
     long getLatencyErrorMs();
 
     long getLatencyWarningNanos();
+
+    long getLogTimePeriodMs();
 }
