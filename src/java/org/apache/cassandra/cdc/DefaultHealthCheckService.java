@@ -26,7 +26,10 @@ class DefaultHealthCheckService implements CDCHealthCheckService
     public void reportHintsReachedMax()
     {
         // Update state only when it was ok
-        status.compareAndSet(State.OK, State.UNHEALTHY);
+        if (status.compareAndSet(State.OK, State.UNHEALTHY))
+        {
+            stateChangeHandler.accept(State.UNHEALTHY);
+        }
     }
 
     @Override

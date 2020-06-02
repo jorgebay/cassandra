@@ -5,7 +5,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -24,6 +26,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.CDCWriteException;
+import org.apache.cassandra.metrics.CDCServiceMetrics;
+import org.mockito.ArgumentCaptor;
 
 import static com.google.common.collect.Lists.newArrayList;
 import static java.util.stream.Collectors.toList;
@@ -65,9 +69,9 @@ public class CDCServiceTest
     }
 
     @Test
-    public void testProducerIsInitialized() throws IOException
+    public void shouldInitializeTheProducer() throws IOException
     {
-        CDCServiceFactory builder = new CDCServiceFactory();
+        ServiceBuilder builder = new ServiceBuilder();
         CDCService service = builder.build();
         service.init();
 
@@ -75,18 +79,18 @@ public class CDCServiceTest
     }
 
     @Test
-    public void testSendThrowsAfterShutdown() throws IOException
+    public void shouldThrowWhenSendIsCalledAfterShutdown() throws IOException
     {
-        CDCService service = new CDCServiceFactory().buildInit();
+        CDCService service = new ServiceBuilder().buildInit();
         service.shutdown();
 
         assertThrows(() -> service.send(null), "CDC Service can't send after shutdown");
     }
 
     @Test
-    public void testSendReturnsWhenSuceeds() throws IOException
+    public void shouldCallProducerSend() throws IOException
     {
-        CDCServiceFactory builder = new CDCServiceFactory();
+        ServiceBuilder builder = new ServiceBuilder();
         CDCService service = builder.buildInit();
         when(builder.producer.send(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
@@ -95,14 +99,26 @@ public class CDCServiceTest
     }
 
     @Test
-    public void testSendThrowsWhenErrorAndHintsDisabledAndCallsHealthCheck() throws IOException
+    public void shouldThrowOnErrorWhenHintsDisabled() throws IOException
     {
-        CDCServiceFactory builder = new CDCServiceFactory();
+        testThrow(new ServiceBuilder(), "CDC Producer failed to acknowledge the mutation");
+    }
+
+    @Test
+    public void shouldThrowOnErrorWhenHintCanNotBeStored() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder().withHintsEnabled();
+        when(builder.hintService.storeHint(any())).thenReturn(false);
+        testThrow(builder, "CDC Service failure after");
+    }
+
+    private void testThrow(ServiceBuilder builder, String errorMessage) throws IOException
+    {
         CDCService service = builder.buildInit();
         Exception ex = new Exception("Test error");
         when(builder.producer.send(any(), any())).thenReturn(failedFuture(ex));
 
-        assertThrows(() -> service.send(sampleMutation), "CDC Producer failed to acknowledge the mutation");
+        assertThrows(() -> service.send(sampleMutation), errorMessage);
         verify(builder.producer, times(1)).send(eq(sampleMutation), any());
 
         // Verify exception is reported back to the health check service
@@ -110,9 +126,23 @@ public class CDCServiceTest
     }
 
     @Test
-    public void testSendLogsLatencyOncePerPeriod() throws IOException
+    public void shouldNotThrowWhenHintsCanBeStored() throws IOException
     {
-        CDCServiceFactory builder = new CDCServiceFactory();
+        ServiceBuilder builder = new ServiceBuilder().withHintsEnabled();
+        when(builder.hintService.storeHint(any())).thenReturn(true);
+        CDCService service = builder.buildInit();
+        Exception ex = new Exception("Test error");
+        when(builder.producer.send(any(), any())).thenReturn(failedFuture(ex));
+
+        service.send(sampleMutation);
+        verify(builder.producer, times(1)).send(eq(sampleMutation), any());
+        verify(builder.healthCheck, times(1)).reportSendError(eq(sampleMutation), eq(ex));
+    }
+
+    @Test
+    public void shouldLogLatencyWarningOncePerPeriod() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder();
         CDCService service = builder.buildInit();
         CompletableFuture<Void> future = new CompletableFuture<>();
         when(builder.producer.send(any(), any())).thenReturn(future);
@@ -162,14 +192,114 @@ public class CDCServiceTest
         assertThat(events.get(0).getMessage(), containsString("CDC Producer took"));
     }
 
-    private static class CDCServiceFactory
+    @Test
+    public void testSendMetricsCountsInFlight() throws IOException
+    {
+        assertThat(CDCServiceMetrics.producerMessagesInFlight.getCount(), equalTo(0L));
+        ServiceBuilder builder = new ServiceBuilder();
+        CDCService service = builder.buildInit();
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        AtomicReference<Throwable> exReference = new AtomicReference<>();
+        AtomicLong result = new AtomicLong();
+        when(builder.producer.send(any(), any())).thenReturn(future);
+
+        final long length = 3;
+        List<Thread> threads = IntStream.range(0, (int) length).boxed()
+                                        .map(i -> new Thread(() -> service.send(sampleMutation))).collect(toList());
+        threads.forEach(t -> {
+            t.setUncaughtExceptionHandler((t1, e) -> exReference.set(e));
+            t.start();
+        });
+
+        Thread threadThatWaits = new Thread(() -> {
+            for (int i = 0; i < 10; i++)
+            {
+                long count = CDCServiceMetrics.producerMessagesInFlight.getCount();
+                result.set(count);
+                if (count == length)
+                {
+                    break;
+                }
+                try
+                {
+                    Thread.sleep(20);
+                }
+                catch (InterruptedException e)
+                {
+                    exReference.set(e);
+                }
+            }
+
+            future.complete(null);
+        });
+        threadThatWaits.start();
+
+        threads.add(threadThatWaits);
+
+        threads.forEach(thread -> {
+            try
+            {
+                thread.join(2000);
+            }
+            catch (InterruptedException e)
+            {
+                exReference.set(e);
+            }
+        });
+
+        verify(builder.producer, times((int) length)).send(eq(sampleMutation), any());
+        assertThat(exReference.get(), equalTo(null));
+        assertThat(result.get(), equalTo(length));
+    }
+
+    @Test
+    public void shouldRejectSendingAfterConsideredUnhealthy() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder().captureStateHandler()
+                                                     .withProducerSendVoid()
+                                                     .withHintsEnabled();
+
+        CDCService service = builder.buildInit();
+        Consumer<State> handler = builder.valueCapture.getValue();
+
+        service.send(sampleMutation);
+        // Mark it as unhealthy
+        handler.accept(State.UNHEALTHY);
+        assertThrows(() -> service.send(sampleMutation), "CDC Service failure after");
+    }
+
+    @Test
+    public void shouldContinueSendingAfterConsideredHealthy() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder().captureStateHandler()
+                                                     .withProducerSendVoid()
+                                                     .withHintsEnabled();
+
+        CDCService service = builder.buildInit();
+        Consumer<State> handler = builder.valueCapture.getValue();
+
+        // First successfull send
+        service.send(sampleMutation);
+
+        handler.accept(State.UNHEALTHY);
+        assertThrows(() -> service.send(sampleMutation), "CDC Service failure after");
+
+        // Mark healthy back again
+        handler.accept(State.OK);
+
+        service.send(sampleMutation);
+        verify(builder.producer, times(2)).send(eq(sampleMutation), any());
+    }
+
+    private static class ServiceBuilder
     {
         CDCConfig config = mock(CDCConfig.class);
         CDCProducer producer = mock(CDCProducer.class);
         CDCHealthCheckService healthCheck = mock(CDCHealthCheckService.class);
         CDCHintService hintService = mock(CDCHintService.class);
+        ArgumentCaptor<Consumer<State>> valueCapture;
 
-        CDCServiceFactory()
+        ServiceBuilder()
         {
             when(producer.init(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
@@ -177,6 +307,26 @@ public class CDCServiceTest
             when(config.getLatencyWarningNanos()).thenReturn(TimeUnit.NANOSECONDS.convert(100L, TimeUnit.MILLISECONDS));
             when(config.getLogTimePeriodMs()).thenReturn(TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS));
             when(config.getLatencyErrorMs()).thenReturn(TimeUnit.MILLISECONDS.convert(2, TimeUnit.SECONDS));
+        }
+
+        @SuppressWarnings("unchecked")
+        ServiceBuilder captureStateHandler()
+        {
+            valueCapture = ArgumentCaptor.forClass(Consumer.class);
+            doNothing().when(healthCheck).init(anyDouble(), valueCapture.capture(), any());
+            return this;
+        }
+
+        ServiceBuilder withProducerSendVoid()
+        {
+            when(producer.send(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+            return this;
+        }
+
+        ServiceBuilder withHintsEnabled()
+        {
+            when(config.useHints()).thenReturn(true);
+            return this;
         }
 
         CDCService build()

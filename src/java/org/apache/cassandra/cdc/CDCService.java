@@ -112,6 +112,7 @@ public final class CDCService implements CDCServiceMBean
                 return;
             }
 
+            logger.debug("Mutation could not be acknowledge by the CDC producer", ex);
             healthCheck.reportSendError(mutation, ex);
         }
 
@@ -125,12 +126,6 @@ public final class CDCService implements CDCServiceMBean
             // Hints failed to be stored
             throw new CDCWriteException(String.format("CDC Service failure after %s hints stored", config.getMaxHints()));
         }
-    }
-
-    //TODO: Remove and include log somewhere else
-    private void handleSendError(Exception ex)
-    {
-        logger.debug("Mutation could not be acknowledge by the CDC producer", ex);
     }
 
     private Exception sendToProducer(Mutation mutation) {
@@ -154,12 +149,12 @@ public final class CDCService implements CDCServiceMBean
             CDCServiceMetrics.producerLatency.addNano(System.nanoTime() - start);
             return e;
         }
-        catch (ExecutionException|InterruptedException e)
+        catch (Exception e)
         {
             CDCServiceMetrics.producerFailures.mark();
             CDCServiceMetrics.producerLatency.addNano(System.nanoTime() - start);
 
-            if (e.getCause() instanceof Exception)
+            if (e instanceof ExecutionException && e.getCause() instanceof Exception)
             {
                 // Try to unwrap
                 return (Exception) e.getCause();
