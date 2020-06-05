@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -24,9 +26,16 @@ import ch.qos.logback.classic.Logger;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.exceptions.CDCWriteException;
 import org.apache.cassandra.metrics.CDCServiceMetrics;
+import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.schema.TableParams;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.mockito.ArgumentCaptor;
 
 import static com.google.common.collect.Lists.newArrayList;
@@ -39,12 +48,20 @@ import static org.mockito.Mockito.*;
 
 public class CDCServiceTest
 {
-    private static final Mutation sampleMutation = null;
+    private static Mutation sampleMutation;
     private InMemoryAppender logAppender;
 
     @BeforeClass
     public static void setup()
     {
+        DatabaseDescriptor.daemonInitialization();
+        TableMetadata table = TableMetadata.builder("ks1", "tbl1")
+                                           .partitioner(Murmur3Partitioner.instance)
+                                           .params(TableParams.builder().cdc(true).build())
+                                           .addPartitionKeyColumn("key0", UTF8Type.instance).build();
+        PartitionUpdate pUpdate =
+            PartitionUpdate.emptyUpdate(table, table.partitioner.decorateKey(ByteBufferUtil.bytes("key0")));
+        sampleMutation = new Mutation(pUpdate);
         System.setProperty("org.apache.cassandra.disable_mbean_registration", "true");
     }
 
@@ -55,7 +72,8 @@ public class CDCServiceTest
     }
 
     @Before
-    public void beforeEach() {
+    public void beforeEach()
+    {
         logAppender = new InMemoryAppender();
         Logger logger = (Logger) LoggerFactory.getLogger(CDCService.class);
         logger.addAppender(logAppender);
@@ -63,7 +81,8 @@ public class CDCServiceTest
     }
 
     @After
-    public void afterEach() {
+    public void afterEach()
+    {
         Logger logger = (Logger) LoggerFactory.getLogger(CDCService.class);
         logger.detachAppender(logAppender);
     }
@@ -84,7 +103,7 @@ public class CDCServiceTest
         CDCService service = new ServiceBuilder().buildInit();
         service.shutdown();
 
-        assertThrows(() -> service.send(null), "CDC Service can't send after shutdown");
+        assertThrows(() -> service.send(sampleMutation), "CDC Service can't send after shutdown");
     }
 
     @Test
@@ -96,6 +115,24 @@ public class CDCServiceTest
 
         service.send(sampleMutation);
         verify(builder.producer, times(1)).send(eq(sampleMutation), any());
+    }
+
+    @Test
+    public void shouldNotCallProducerWhenCdcIsDisabledForTable() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder();
+        CDCService service = builder.buildInit();
+        when(builder.producer.send(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+
+        TableMetadata table = TableMetadata.builder("ks1", "tbl1")
+                                           .partitioner(Murmur3Partitioner.instance)
+                                           // With CDC=false
+                                           .params(TableParams.builder().cdc(false).build())
+                                           .addPartitionKeyColumn("key0", UTF8Type.instance).build();
+        PartitionUpdate pUpdate = PartitionUpdate.emptyUpdate(table, table.partitioner.decorateKey(ByteBufferUtil.bytes("key0")));
+        Mutation mutation = new Mutation(pUpdate);
+        service.send(mutation);
+        verify(builder.producer, times(0)).send(any(), any());
     }
 
     @Test
@@ -144,21 +181,12 @@ public class CDCServiceTest
     {
         ServiceBuilder builder = new ServiceBuilder();
         CDCService service = builder.buildInit();
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        when(builder.producer.send(any(), any())).thenReturn(future);
-        when(builder.config.getLatencyWarningNanos())
-            .thenReturn(TimeUnit.NANOSECONDS.convert(1L, TimeUnit.MILLISECONDS));
-        when(builder.config.getLogTimePeriodMs()).thenReturn(1000L);
+        when(builder.producer.send(any(), any())).then(i -> delayedFuture(10));
+        when(builder.config.getLatencyWarningNanos()).thenReturn(NANOSECONDS.convert(1L, MILLISECONDS));
+        when(builder.config.getLogTimePeriodMs()).thenReturn(5000L);
         when(builder.config.getLatencyErrorMs()).thenReturn(Long.MAX_VALUE);
         AtomicReference<Throwable> result = new AtomicReference<>();
         Runnable task = () -> service.send(sampleMutation);
-
-        // Complete the future in the background in 10ms aprox
-        Executors.newCachedThreadPool().submit(() -> {
-            Thread.sleep(10);
-            future.complete(null);
-            return null;
-        });
 
         final int length = 10;
         List<Thread> threads = IntStream.range(0, length).boxed()
@@ -253,6 +281,29 @@ public class CDCServiceTest
     }
 
     @Test
+    public void testSendMarksTimeout() throws IOException
+    {
+        ServiceBuilder builder = new ServiceBuilder();
+        CDCService service = builder.buildInit();
+        when(builder.producer.send(any(), any())).then(i -> delayedFuture(20));
+        when(builder.config.getLatencyWarningNanos()).thenReturn(NANOSECONDS.convert(1L, MILLISECONDS));
+        when(builder.config.getLogTimePeriodMs()).thenReturn(5000L);
+        when(builder.config.getLatencyErrorMs()).thenReturn(10L);
+
+        long initialCount = CDCServiceMetrics.producerTimedOut.getCount();
+        assertThrows(() -> service.send(sampleMutation), null);
+        assertThat(CDCServiceMetrics.producerTimedOut.getCount(), equalTo(initialCount + 1));
+    }
+
+    @Test
+    public void shouldMarkFailures() throws IOException
+    {
+        long initialCount = CDCServiceMetrics.producerFailures.getCount();
+        testThrow(new ServiceBuilder(), null);
+        assertThat(CDCServiceMetrics.producerFailures.getCount(), equalTo(initialCount + 1));
+    }
+
+    @Test
     public void shouldRejectSendingAfterConsideredUnhealthy() throws IOException
     {
         ServiceBuilder builder = new ServiceBuilder().captureStateHandler()
@@ -291,6 +342,18 @@ public class CDCServiceTest
         verify(builder.producer, times(2)).send(eq(sampleMutation), any());
     }
 
+    private static CompletableFuture<Void> delayedFuture(long millis)
+    {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        // Complete the future in the background
+        Executors.newCachedThreadPool().submit(() -> {
+            Thread.sleep(millis);
+            future.complete(null);
+            return null;
+        });
+        return future;
+    }
+
     private static class ServiceBuilder
     {
         CDCConfig config = mock(CDCConfig.class);
@@ -304,9 +367,9 @@ public class CDCServiceTest
             when(producer.init(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
             // Use sanish config defaults
-            when(config.getLatencyWarningNanos()).thenReturn(TimeUnit.NANOSECONDS.convert(100L, TimeUnit.MILLISECONDS));
-            when(config.getLogTimePeriodMs()).thenReturn(TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS));
-            when(config.getLatencyErrorMs()).thenReturn(TimeUnit.MILLISECONDS.convert(2, TimeUnit.SECONDS));
+            when(config.getLatencyWarningNanos()).thenReturn(NANOSECONDS.convert(100L, MILLISECONDS));
+            when(config.getLogTimePeriodMs()).thenReturn(MILLISECONDS.convert(1, TimeUnit.DAYS));
+            when(config.getLatencyErrorMs()).thenReturn(MILLISECONDS.convert(2, TimeUnit.SECONDS));
         }
 
         @SuppressWarnings("unchecked")
@@ -334,7 +397,9 @@ public class CDCServiceTest
             return new CDCService(config, producer, healthCheck, hintService);
         }
 
-        /** builds an initialized instance */
+        /**
+         * builds an initialized instance
+         */
         CDCService buildInit() throws IOException
         {
             CDCService builder = build();

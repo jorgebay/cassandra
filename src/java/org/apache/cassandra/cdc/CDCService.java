@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.CDCWriteException;
 import org.apache.cassandra.metrics.CDCServiceMetrics;
+import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.utils.MBeanWrapper;
 
 /**
@@ -82,7 +83,11 @@ public final class CDCService implements CDCServiceMBean
 
     private void registerMBean()
     {
-        MBeanWrapper.instance.registerMBean(this, MBEAN_NAME);
+        // Allow multiple registrations for unit tests
+        if (!MBeanWrapper.instance.isRegistered(MBEAN_NAME))
+        {
+            MBeanWrapper.instance.registerMBean(this, MBEAN_NAME);
+        }
     }
 
     /**
@@ -90,6 +95,11 @@ public final class CDCService implements CDCServiceMBean
      */
     public void send(Mutation mutation) throws CDCWriteException
     {
+        if (!mutation.trackedByCDC())
+        {
+            return;
+        }
+
         // A cheap check whether the CDC Producer can be used
         // State might change after storing this value but the outcome should be as expected
         final State initialState = stateInstant;
@@ -133,7 +143,9 @@ public final class CDCService implements CDCServiceMBean
         CDCServiceMetrics.producerMessagesInFlight.inc();
         try
         {
-            CompletableFuture<Void> future = producer.send(mutation, DefaultMutationCDCInfo.clientRequestInfo);
+            DefaultMutationCDCInfo info = new DefaultMutationCDCInfo(EventSource.CLIENT_REQUEST,
+                                                                     Schema.instance.getVersion());
+            CompletableFuture<Void> future = producer.send(mutation, info);
             future.get(config.getLatencyErrorMs(), TimeUnit.MILLISECONDS);
             long latencyNanos = System.nanoTime() - start;
             CDCServiceMetrics.producerLatency.addNano(latencyNanos);
