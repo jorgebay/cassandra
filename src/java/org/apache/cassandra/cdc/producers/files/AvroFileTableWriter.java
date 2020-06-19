@@ -12,7 +12,7 @@ import org.apache.cassandra.schema.TableId;
  */
 public class AvroFileTableWriter implements AutoCloseable
 {
-    private ConcurrentHashMap<TableId, TableSegmentManager> segmentManager = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TableId, TableSegmentManager> segmentManager = new ConcurrentHashMap<>();
 
     public void init()
     {
@@ -37,7 +37,7 @@ public class AvroFileTableWriter implements AutoCloseable
 
         // TODO: copy the contents
 
-        // mark as block written
+        // mark block as written
         allocation.markAsWritten();
 
         return allocation.whenFlushed();
