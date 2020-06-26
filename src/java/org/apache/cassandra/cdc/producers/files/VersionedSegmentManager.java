@@ -1,7 +1,5 @@
 package org.apache.cassandra.cdc.producers.files;
 
-import java.util.concurrent.CompletableFuture;
-
 import org.apache.cassandra.schema.TableMetadata;
 
 /**
@@ -14,6 +12,11 @@ class VersionedSegmentManager
     VersionedSegmentManager(TableMetadata table)
     {
         this.table = table;
+    }
+
+    TableMetadata getTable()
+    {
+        return this.table;
     }
 
     FileSegmentAllocation allocate(int length)
