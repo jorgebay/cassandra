@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.CDCWriteException;
+import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.metrics.CDCServiceMetrics;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.utils.MBeanWrapper;
@@ -93,7 +94,8 @@ public final class CDCService implements CDCServiceMBean
     /**
      * Sends the mutation to the CDC.
      */
-    public void send(Mutation mutation) throws CDCWriteException
+    @Override
+    public void publish(Mutation mutation) throws CDCWriteException
     {
         if (!mutation.trackedByCDC())
         {
@@ -136,6 +138,16 @@ public final class CDCService implements CDCServiceMBean
             // Hints failed to be stored
             throw new CDCWriteException(String.format("CDC Service failure after %s hints stored", config.getMaxHints()));
         }
+    }
+
+    @Override
+    public void delegatePublishing(InetAddressAndPort leader, Mutation mutation) throws CDCWriteException{
+        if (!mutation.trackedByCDC())
+        {
+            return;
+        }
+
+        //TODO: Send message to leader
     }
 
     private Exception sendToProducer(Mutation mutation) {

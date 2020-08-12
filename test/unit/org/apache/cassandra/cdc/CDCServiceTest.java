@@ -103,7 +103,7 @@ public class CDCServiceTest
         CDCService service = new ServiceBuilder().buildInit();
         service.shutdown();
 
-        assertThrows(() -> service.send(sampleMutation), "CDC Service can't send after shutdown");
+        assertThrows(() -> service.publish(sampleMutation), "CDC Service can't send after shutdown");
     }
 
     @Test
@@ -113,7 +113,7 @@ public class CDCServiceTest
         CDCService service = builder.buildInit();
         when(builder.producer.send(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
-        service.send(sampleMutation);
+        service.publish(sampleMutation);
         verify(builder.producer, times(1)).send(eq(sampleMutation), any());
     }
 
@@ -131,7 +131,7 @@ public class CDCServiceTest
                                            .addPartitionKeyColumn("key0", UTF8Type.instance).build();
         PartitionUpdate pUpdate = PartitionUpdate.emptyUpdate(table, table.partitioner.decorateKey(ByteBufferUtil.bytes("key0")));
         Mutation mutation = new Mutation(pUpdate);
-        service.send(mutation);
+        service.publish(mutation);
         verify(builder.producer, times(0)).send(any(), any());
     }
 
@@ -155,7 +155,7 @@ public class CDCServiceTest
         Exception ex = new Exception("Test error");
         when(builder.producer.send(any(), any())).thenReturn(failedFuture(ex));
 
-        assertThrows(() -> service.send(sampleMutation), errorMessage);
+        assertThrows(() -> service.publish(sampleMutation), errorMessage);
         verify(builder.producer, times(1)).send(eq(sampleMutation), any());
 
         // Verify exception is reported back to the health check service
@@ -171,7 +171,7 @@ public class CDCServiceTest
         Exception ex = new Exception("Test error");
         when(builder.producer.send(any(), any())).thenReturn(failedFuture(ex));
 
-        service.send(sampleMutation);
+        service.publish(sampleMutation);
         verify(builder.producer, times(1)).send(eq(sampleMutation), any());
         verify(builder.healthCheck, times(1)).reportSendError(eq(sampleMutation), eq(ex));
     }
@@ -186,7 +186,7 @@ public class CDCServiceTest
         when(builder.config.getLogTimePeriodMs()).thenReturn(5000L);
         when(builder.config.getLatencyErrorMs()).thenReturn(Long.MAX_VALUE);
         AtomicReference<Throwable> result = new AtomicReference<>();
-        Runnable task = () -> service.send(sampleMutation);
+        Runnable task = () -> service.publish(sampleMutation);
 
         final int length = 10;
         List<Thread> threads = IntStream.range(0, length).boxed()
@@ -233,7 +233,7 @@ public class CDCServiceTest
 
         final long length = 3;
         List<Thread> threads = IntStream.range(0, (int) length).boxed()
-                                        .map(i -> new Thread(() -> service.send(sampleMutation))).collect(toList());
+                                        .map(i -> new Thread(() -> service.publish(sampleMutation))).collect(toList());
         threads.forEach(t -> {
             t.setUncaughtExceptionHandler((t1, e) -> exReference.set(e));
             t.start();
@@ -291,7 +291,7 @@ public class CDCServiceTest
         when(builder.config.getLatencyErrorMs()).thenReturn(10L);
 
         long initialCount = CDCServiceMetrics.producerTimedOut.getCount();
-        assertThrows(() -> service.send(sampleMutation), null);
+        assertThrows(() -> service.publish(sampleMutation), null);
         assertThat(CDCServiceMetrics.producerTimedOut.getCount(), equalTo(initialCount + 1));
     }
 
@@ -313,10 +313,10 @@ public class CDCServiceTest
         CDCService service = builder.buildInit();
         Consumer<State> handler = builder.valueCapture.getValue();
 
-        service.send(sampleMutation);
+        service.publish(sampleMutation);
         // Mark it as unhealthy
         handler.accept(State.UNHEALTHY);
-        assertThrows(() -> service.send(sampleMutation), "CDC Service failure after");
+        assertThrows(() -> service.publish(sampleMutation), "CDC Service failure after");
     }
 
     @Test
@@ -330,15 +330,15 @@ public class CDCServiceTest
         Consumer<State> handler = builder.valueCapture.getValue();
 
         // First successfull send
-        service.send(sampleMutation);
+        service.publish(sampleMutation);
 
         handler.accept(State.UNHEALTHY);
-        assertThrows(() -> service.send(sampleMutation), "CDC Service failure after");
+        assertThrows(() -> service.publish(sampleMutation), "CDC Service failure after");
 
         // Mark healthy back again
         handler.accept(State.OK);
 
-        service.send(sampleMutation);
+        service.publish(sampleMutation);
         verify(builder.producer, times(2)).send(eq(sampleMutation), any());
     }
 
