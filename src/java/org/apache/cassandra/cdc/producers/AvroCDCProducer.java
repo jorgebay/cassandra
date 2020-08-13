@@ -2,7 +2,6 @@ package org.apache.cassandra.cdc.producers;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.cassandra.cdc.CDCProducer;
@@ -22,12 +21,15 @@ public class AvroCDCProducer implements CDCProducer
     private static final CompletableFuture<Void> completedFuture = CompletableFuture.completedFuture(null);
     private final AvroFileTableWriter writer = new AvroFileTableWriter();
 
+    @Override
     public CompletableFuture<Void> init(Map<String, Object> options, MetricNameFactory factory)
     {
-        writer.init();
+        //TODO: Use settings
+        writer.init(2L, AvroFileTableWriter.Acks.NONE);
         return CompletableFuture.completedFuture(null);
     }
 
+    @Override
     public CompletableFuture<Void> send(Mutation mutation, MutationCDCInfo info)
     {
         Collection<PartitionUpdate> updates = mutation.getPartitionUpdates();

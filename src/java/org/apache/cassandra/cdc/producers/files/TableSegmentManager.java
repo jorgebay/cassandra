@@ -1,5 +1,7 @@
 package org.apache.cassandra.cdc.producers.files;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,5 +35,10 @@ class TableSegmentManager
         });
 
         return m.allocate(length);
+    }
+
+    Set<VersionedSegmentManager> getVersionedSegmentManagers()
+    {
+        return new HashSet<>(managers.values());
     }
 }

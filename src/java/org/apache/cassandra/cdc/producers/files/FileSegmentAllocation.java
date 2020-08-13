@@ -5,14 +5,21 @@ import java.util.concurrent.CompletableFuture;
 
 interface FileSegmentAllocation
 {
-    /** Gets a future that is completed when the allocation is flushed */
-    CompletableFuture<Void> whenFlushed();
-
     ByteBuffer getBuffer();
 
     void markAsWritten();
 
-    void markAsFlushed();
+    void markAsFlushed(Exception e);
+
+    //TODO: Determine where to call it
+    void markAsReplicated(Exception e);
 
     boolean wasWritten();
+
+    /** Gets a future that is completed when the allocation is flushed */
+    CompletableFuture<Void> whenFlushed();
+
+    CompletableFuture<Void> whenWrittenOnAllReplicas();
+
+    CompletableFuture<Void> whenWrittenOnAReplica();
 }
