@@ -1,6 +1,9 @@
 package org.apache.cassandra.cdc.producers.files;
 
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,9 +19,24 @@ class Segment
     private final ConcurrentHashMap<Integer, FileSegmentAllocation> allocations = new ConcurrentHashMap<>();
     private final AtomicInteger position = new AtomicInteger();
     private final AtomicInteger allocating = new AtomicInteger();
+    private final ByteBuffer buffer;
+    private final int maxLength;
     private int pollPosition;
-    //TODO: Replace with actual size
-    private static final int MAX_LENGTH = 32*1024*1024;
+
+    public Segment(int maxLength)
+    {
+        this.buffer = ByteBuffer.allocate(maxLength);
+        this.maxLength = maxLength;
+    }
+
+    /**
+     * Gets or creates the file channel.
+     * Not thread safe.
+     */
+    public FileChannel getChannel()
+    {
+        throw new RuntimeException("Not implemented");
+    }
 
     private enum State
     {
@@ -73,7 +91,7 @@ class Segment
         {
             int start = position.get();
             int next = start + length;
-            if (next >= MAX_LENGTH)
+            if (next >= maxLength)
             {
                 return -1;
             }
@@ -86,11 +104,12 @@ class Segment
 
     /**
      * Retrieves and remove all written allocations made so far.
-     * Not thread-safe.
+     * Not thread safe.
      */
-    Collection<FileSegmentAllocation> pollAll()
+    SegmentSubrange pollAll()
     {
         List<FileSegmentAllocation> list = new LinkedList<>();
+        int startIndex = pollPosition;
         while (pollPosition < position.get())
         {
             FileSegmentAllocation item = allocations.get(pollPosition);
@@ -105,6 +124,46 @@ class Segment
             pollPosition += item.getLength();
         }
 
-        return list;
+        if (list.size() == 0)
+        {
+            return SegmentSubrange.empty;
+        }
+
+        return new SegmentSubrange((ByteBuffer) buffer.duplicate().position(startIndex).limit(pollPosition), list);
+    }
+
+    /**
+     * Represents information about a range within a segment, composed of a ByteBuffer (view) and a group
+     * of allocations.
+     */
+    static class SegmentSubrange
+    {
+        private final ByteBuffer buffer;
+        private final Collection<FileSegmentAllocation> allocations;
+
+        private static final SegmentSubrange empty = new SegmentSubrange(
+            ByteBuffer.allocate(0).asReadOnlyBuffer(),
+            Collections.emptyList());
+
+        SegmentSubrange(ByteBuffer buffer, Collection<FileSegmentAllocation> allocations)
+        {
+            this.buffer = buffer;
+            this.allocations = allocations;
+        }
+
+        public ByteBuffer getBuffer()
+        {
+            return buffer;
+        }
+
+        public Collection<FileSegmentAllocation> getAllocations()
+        {
+            return allocations;
+        }
+
+        public boolean isEmpty()
+        {
+            return allocations.size() == 0;
+        }
     }
 }

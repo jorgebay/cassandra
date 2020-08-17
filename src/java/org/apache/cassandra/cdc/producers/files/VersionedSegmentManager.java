@@ -13,6 +13,8 @@ class VersionedSegmentManager
 {
     private final TableMetadata table;
     private final CopyOnWriteArrayList<Segment> segments = new CopyOnWriteArrayList<>();
+    //TODO: Replace with actual size
+    private static final int SEGMENT_MAX_LENGTH = 32*1024*1024;
 
     VersionedSegmentManager(TableMetadata table)
     {
@@ -49,7 +51,7 @@ class VersionedSegmentManager
         {
             return segment;
         }
-        segment = new Segment();
+        segment = new Segment(SEGMENT_MAX_LENGTH);
         segments.add(segment);
         return segment;
     }
