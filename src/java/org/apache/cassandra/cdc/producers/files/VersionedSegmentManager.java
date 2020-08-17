@@ -1,13 +1,10 @@
 package org.apache.cassandra.cdc.producers.files;
 
 import java.util.Collection;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
-
-import javax.annotation.concurrent.NotThreadSafe;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Collectors3;
 
 /**
  * Represents a segment manager for a given table version.
@@ -15,7 +12,7 @@ import org.apache.cassandra.schema.TableMetadata;
 class VersionedSegmentManager
 {
     private final TableMetadata table;
-    private final LinkedBlockingQueue<FileSegmentAllocation> allocations = new LinkedBlockingQueue<>();
+    private final CopyOnWriteArrayList<Segment> segments = new CopyOnWriteArrayList<>();
 
     VersionedSegmentManager(TableMetadata table)
     {
@@ -29,28 +26,51 @@ class VersionedSegmentManager
 
     FileSegmentAllocation allocate(int length)
     {
-        throw new RuntimeException("Not implemented");
-    }
-
-    /**
-     * Retrieves and remove all written allocations made so far.
-     */
-    Collection<FileSegmentAllocation> pollAll()
-    {
-        List<FileSegmentAllocation> list = new LinkedList<>();
-        for (FileSegmentAllocation item = allocations.peek(); item != null; item = allocations.peek())
+        // Get or create a segment where the allocation will be made
+        FileSegmentAllocation allocation = null;
+        while (allocation == null)
         {
-            if (!item.wasWritten())
+            Segment segment = getAvailableSegment();
+            if (segment == null)
             {
-                // The item was not written by writter thread yet
-                allocations.add(item);
-                break;
+                segment = getOrCreateSegment();
             }
-
-            allocations.remove();
-            list.add(item);
+            allocation = segment.allocate(length);
         }
 
-        return list;
+        return allocation;
+    }
+
+    /** Gets or add a new available segment using locks */
+    private synchronized Segment getOrCreateSegment()
+    {
+        Segment segment = getAvailableSegment();
+        if (segment != null)
+        {
+            return segment;
+        }
+        segment = new Segment();
+        segments.add(segment);
+        return segment;
+    }
+
+    /** Optimistically gets a segment that can allocate */
+    Segment getAvailableSegment()
+    {
+        for (Segment item : segments)
+        {
+            if (item.canAllocate())
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    /** Gets a snapshot of the existing segments */
+    Collection<Segment> getExistingSegments()
+    {
+        return segments.stream().collect(Collectors3.toImmutableList());
     }
 }

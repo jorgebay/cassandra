@@ -8,7 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.cassandra.schema.TableMetadata;
 
 /**
- * Represents a segment manager for a given table.
+ * Manages segments and allocations for a given table.
+ * <p>A {@link TableSegmentManager} owns one or more {@link VersionedSegmentManager} instances (one per
+ * different table version), at the same time a {@link VersionedSegmentManager} owns one or more active segments.</p>
  */
 class TableSegmentManager
 {

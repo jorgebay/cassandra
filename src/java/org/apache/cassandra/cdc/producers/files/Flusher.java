@@ -25,44 +25,42 @@ class Flusher
 
     void flush()
     {
-        Collection<TableSegmentManager> tableSegments = this.segmentManager.values();
-        for (TableSegmentManager t: tableSegments)
-        {
-            for (VersionedSegmentManager tableVersion : t.getVersionedSegmentManagers())
-            {
-                Collection<FileSegmentAllocation> allocations = tableVersion.pollAll();
-                if (allocations.size() == 0) {
-                    // TODO: Define when and how a channel can be closed and version removed from table
-                }
-
-                // TODO: Get or open file for the table version
-                FileChannel channel = getChannel();
-                ByteBuffer[] buffers = allocations.stream()
-                                                  .map(FileSegmentAllocation::getBuffer)
-                                                  .toArray(ByteBuffer[]::new);
-                Exception writeException = null;
-
-                try
-                {
-                    channel.write(buffers);
-                }
-                catch (IOException e)
-                {
-                    writeException = e;
-                    //TODO: Mark file as errored
-                }
-
-                for (FileSegmentAllocation a : allocations)
-                {
-                    a.markAsFlushed(writeException);
-                }
-
-                if (writeException == null)
-                {
-                    onChunkFlushed.accept(tableVersion, buffers);
-                }
-            }
-        }
+//        Collection<TableSegmentManager> tableSegments = this.segmentManager.values();
+//        for (TableSegmentManager t: tableSegments)
+//        {
+//            for (VersionedSegmentManager tableVersion : t.getVersionedSegmentManagers())
+//            {
+//                Collection<Segment> segments = tableVersion.getExistingSegments();
+//                if (segments.size() == 0) {
+//                    // TODO: Define when and how a channel can be closed and version removed from table
+//                }
+//
+//                // TODO: Get or open file for the table version
+//                FileChannel channel = getChannel();
+//
+//                Exception writeException = null;
+//
+//                try
+//                {
+//                    //channel.write(buffer);
+//                }
+//                catch (IOException e)
+//                {
+//                    writeException = e;
+//                    //TODO: Mark file as errored
+//                }
+//
+//                for (FileSegmentAllocation a : allocations)
+//                {
+//                    a.markAsFlushed(writeException);
+//                }
+//
+//                if (writeException == null)
+//                {
+//                    onChunkFlushed.accept(tableVersion, buffers);
+//                }
+//            }
+//        }
     }
 
     public void close()
