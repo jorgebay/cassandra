@@ -61,4 +61,10 @@ class DefaultFileSegmentAllocation implements FileSegmentAllocation
     {
         return null;
     }
+
+    @Override
+    public int getLength()
+    {
+        return length;
+    }
 }

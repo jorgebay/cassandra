@@ -22,4 +22,6 @@ interface FileSegmentAllocation
     CompletableFuture<Void> whenWrittenOnAllReplicas();
 
     CompletableFuture<Void> whenWrittenOnAReplica();
+
+    int getLength();
 }
