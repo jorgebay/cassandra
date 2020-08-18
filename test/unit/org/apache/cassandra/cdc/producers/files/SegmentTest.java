@@ -23,7 +23,7 @@ public class SegmentTest
         Segment segment = new SegmentBuilder().build();
         final int times = 20;
         // Invoke n times trying to allocate buffers of 10, 20, 30, ... byte length
-        List<FileSegmentAllocation> result = allocateParallel(segment, times);
+        List<FileSegmentAllocation> result = allocateParallel(segment, times, true);
 
         assertThat(result.size(), equalTo(times));
         assertThat(segment.getPosition(), equalTo(result.stream().mapToInt(FileSegmentAllocation::getLength).sum()));
@@ -44,7 +44,7 @@ public class SegmentTest
     public void pollAllShouldGetContiguousWrittenRanges()
     {
         Segment segment = new SegmentBuilder().build();
-        allocateParallel(segment, 10);
+        allocateParallel(segment, 10, true);
         Map<Integer, FileSegmentAllocation> allocationMap = segment.getAllocationPositions();
 
         List<FileSegmentAllocation> expectedToPoll = new ArrayList<>();
@@ -92,12 +92,26 @@ public class SegmentTest
         assertThat(segment.pollAll().getAllocations().size(), equalTo(length - 3));
     }
 
-    private static List<FileSegmentAllocation> allocateParallel(Segment segment, int amount)
+    @Test
+    public void shouldMarkAsClosingWhenBufferSizeIsReached()
+    {
+        Segment segment = new SegmentBuilder().withMaxLength(55).build();
+        List<FileSegmentAllocation> allocations = allocateParallel(segment, 10, false);
+        // Only 5 allocations could have been made
+        assertThat(allocations.stream().mapToInt(a -> a != null ? 1 : 0).sum(), equalTo(5));
+        assertThat(segment.canAllocate(), equalTo(false));
+    }
+
+    private static List<FileSegmentAllocation> allocateParallel(Segment segment, int amount, boolean incrementSize)
     {
         AtomicInteger counter = new AtomicInteger();
         // Invoke n times trying to allocate buffers of 10, 20, 30, ... byte length
         return invokeParallel(() -> {
-            int length = 10 * counter.incrementAndGet();
+            int length = 10;
+            if (incrementSize)
+            {
+                length = 10 * counter.incrementAndGet();
+            }
             Thread.sleep(10);
             return segment.allocate(length);
         }, amount, 10);
@@ -105,7 +119,13 @@ public class SegmentTest
 
     private static class SegmentBuilder
     {
-        private static final int maxLength = 10000;
+        private int maxLength = 10000;
+
+        SegmentBuilder withMaxLength(int value)
+        {
+            maxLength = value;
+            return this;
+        }
 
         Segment build()
         {

@@ -25,6 +25,7 @@ class Flusher
         this.onChunkFlushed = onChunkFlushed;
     }
 
+    @SuppressWarnings("resource")
     void flush()
     {
         // TODO: Define when and how a channel can be closed and version removed from table
