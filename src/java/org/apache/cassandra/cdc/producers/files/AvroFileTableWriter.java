@@ -79,7 +79,7 @@ public class AvroFileTableWriter implements AutoCloseable
         }
     }
 
-    private void chunkFlushedHandler(VersionedSegmentManager tableVersion, ByteBuffer[] buffers)
+    private void chunkFlushedHandler(VersionedSegmentManager tableVersion, ByteBuffer buffer)
     {
         // TODO: Send to another producer
     }

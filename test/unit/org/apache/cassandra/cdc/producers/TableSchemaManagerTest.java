@@ -1,17 +1,13 @@
 package org.apache.cassandra.cdc.producers;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import org.apache.cassandra.cdc.producers.AsyncCDCProducer.TableSchemaManager;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -20,10 +16,10 @@ import org.apache.cassandra.schema.TableMetadata;
 
 import org.junit.Test;
 
+import static org.apache.cassandra.cdc.CDCTestUtil.invokeParallel;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.junit.Assume.assumeThat;
@@ -189,35 +185,5 @@ public class TableSchemaManagerTest
         }
 
         return builder.build();
-    }
-
-    private static <T> List<T> invokeParallel(Callable<T> task, int times)
-    {
-        ExecutorService executor = Executors.newFixedThreadPool(times);
-        List<Callable<T>> list = Collections.nCopies(times, task);
-
-        List<Future<T>> futures = null;
-
-        try
-        {
-            futures = executor.invokeAll(list);
-        }
-        catch (InterruptedException e)
-        {
-            fail("Tasks interrupted");
-        }
-
-        return futures.stream()
-                      .map(tFuture -> {
-                          try
-                          {
-                              return tFuture.get();
-                          }
-                          catch (Exception e)
-                          {
-                              throw new RuntimeException("Future could not be got", e);
-                          }
-                      })
-                      .collect(Collectors.toList());
     }
 }

@@ -7,6 +7,7 @@ class DefaultFileSegmentAllocation implements FileSegmentAllocation
 {
     private final int start;
     private final int length;
+    private volatile boolean isWritten;
 
     DefaultFileSegmentAllocation(int start, int length)
     {
@@ -23,7 +24,7 @@ class DefaultFileSegmentAllocation implements FileSegmentAllocation
     @Override
     public void markAsWritten()
     {
-
+        isWritten = true;
     }
 
     @Override
@@ -41,7 +42,7 @@ class DefaultFileSegmentAllocation implements FileSegmentAllocation
     @Override
     public boolean wasWritten()
     {
-        return false;
+        return isWritten;
     }
 
     @Override

@@ -1,6 +1,5 @@
 package org.apache.cassandra.cdc.producers.files;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Collection;
@@ -65,7 +64,7 @@ class Flusher
 
                     if (writeException == null)
                     {
-                        onChunkFlushed.accept(tableVersion, compressedBuffer);
+                        onChunkFlushed.accept(tableVersion, (ByteBuffer) compressedBuffer.flip());
                     }
                 }
             }

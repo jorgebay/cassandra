@@ -6,9 +6,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Represents a single file backed by a single buffer where different "regions" are allocated for different mutations.
@@ -46,6 +49,12 @@ class Segment
     boolean canAllocate()
     {
         return state.get() == State.OPEN;
+    }
+
+    @VisibleForTesting
+    int getPosition()
+    {
+        return position.get();
     }
 
     /**
@@ -130,6 +139,13 @@ class Segment
         }
 
         return new SegmentSubrange((ByteBuffer) buffer.duplicate().position(startIndex).limit(pollPosition), list);
+    }
+
+    /** Only for testing, gets a view the allocations made so far*/
+    @VisibleForTesting
+    Map<Integer, FileSegmentAllocation> getAllocationPositions()
+    {
+        return allocations;
     }
 
     /**
