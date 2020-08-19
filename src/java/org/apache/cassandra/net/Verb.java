@@ -30,6 +30,8 @@ import com.google.common.collect.ImmutableList;
 import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.batchlog.BatchRemoveVerbHandler;
 import org.apache.cassandra.batchlog.BatchStoreVerbHandler;
+import org.apache.cassandra.cdc.CDCChunkMessage;
+import org.apache.cassandra.cdc.CDCChunkVerbHandler;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.CounterMutation;
@@ -123,6 +125,9 @@ public enum Verb
     COUNTER_MUTATION_RSP   (84,  P1, counterTimeout,  REQUEST_RESPONSE,  () -> NoPayload.serializer,                 () -> ResponseVerbHandler.instance                             ),
     COUNTER_MUTATION_REQ   (24,  P2, counterTimeout,  COUNTER_MUTATION,  () -> CounterMutation.serializer,           () -> CounterMutationVerbHandler.instance, COUNTER_MUTATION_RSP),
 
+    CDC_CHUNK_RSP          (117, P2, writeTimeout,    REQUEST_RESPONSE,  () -> NoPayload.serializer,                 () -> ResponseVerbHandler.instance                             ),
+    CDC_CHUNK_REQ          (118, P2, writeTimeout,    MUTATION,          () -> CDCChunkMessage.serializer,           () -> CDCChunkVerbHandler.instance,        CDC_CHUNK_RSP       ),
+
     READ_RSP               (63,  P2, readTimeout,     REQUEST_RESPONSE,  () -> ReadResponse.serializer,              () -> ResponseVerbHandler.instance                             ),
     READ_REQ               (3,   P3, readTimeout,     READ,              () -> ReadCommand.serializer,               () -> ReadCommandVerbHandler.instance,     READ_RSP            ),
     RANGE_RSP              (69,  P2, rangeTimeout,    REQUEST_RESPONSE,  () -> ReadResponse.serializer,              () -> ResponseVerbHandler.instance                             ),
@@ -184,7 +189,7 @@ public enum Verb
     @Deprecated
     INTERNAL_RSP           (23,  P1, rpcTimeout,      INTERNAL_RESPONSE, () -> null,                                 () -> ResponseVerbHandler.instance                             ),
 
-    // largest used ID: 116
+    // largest used ID: 118
     ;
 
     public static final List<Verb> VERBS = ImmutableList.copyOf(Verb.values());

@@ -18,16 +18,20 @@
 package org.apache.cassandra.cdc;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cdc.producers.AvroCDCProducer;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.CDCWriteException;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -44,6 +48,7 @@ public final class CDCService implements CDCServiceMBean
 {
     private static final Logger logger = LoggerFactory.getLogger(CDCService.class);
     private static final String MBEAN_NAME = "org.apache.cassandra.cdc:type=CDCService";
+    public static final CDCService instance = new CDCService();
 
     private final CDCConfig config;
     private final CDCProducer producer;
@@ -54,12 +59,19 @@ public final class CDCService implements CDCServiceMBean
     private final AtomicLong lastLatencyLogTime = new AtomicLong();
     private final AtomicLong latencyLogCounter = new AtomicLong();
 
+    @VisibleForTesting
     CDCService(CDCConfig config, CDCProducer producer, CDCHealthCheckService healthCheck, CDCHintService hintService)
     {
         this.config = config;
         this.producer = producer;
         this.healthCheck = healthCheck;
         this.hintService = hintService;
+    }
+
+    private CDCService()
+    {
+        //TODO: Use DatabaseDescriptor
+        this(null, null, new DefaultHealthCheckService(), null);
     }
 
     public void init() throws IOException
@@ -164,7 +176,28 @@ public final class CDCService implements CDCServiceMBean
             return;
         }
 
-        //TODO: Send message to leader
+        //TODO: Send message to node that will act as leader
+        throw new RuntimeException("Not implemented");
+    }
+
+    @Override
+    public void storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer) throws CDCWriteException
+    {
+        CompletableFuture<Void> future = this.producer.storeAsReplica(leaderHostId, chunkId, buffer);
+        try
+        {
+            future.get();
+        }
+        catch (InterruptedException e)
+        {
+            throw new CDCWriteException("Store as replica was interrupted");
+        }
+        catch (ExecutionException e)
+        {
+            Throwable cause = e.getCause();
+            logger.debug("Chunk could not be stored as replica", cause);
+            throw new CDCWriteException("Store as replica encountered an error: " + (cause != null ? cause.getMessage() : e.getMessage()));
+        }
     }
 
     private Exception sendToProducer(Mutation mutation) {

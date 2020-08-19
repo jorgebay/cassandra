@@ -17,7 +17,9 @@
  */
 package org.apache.cassandra.cdc;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.cassandra.db.Mutation;
@@ -41,4 +43,6 @@ public interface CDCProducer extends AutoCloseable
      * It will only be invoked for mutations that should be tracked by the CDC.
      */
     CompletableFuture<Void> send(Mutation mutation, MutationCDCInfo info);
+
+    CompletableFuture<Void> storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer);
 }

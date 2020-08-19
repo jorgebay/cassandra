@@ -17,11 +17,14 @@
  */
 package org.apache.cassandra.cdc.producers;
 
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.cassandra.cdc.CDCProducer;
+import org.apache.cassandra.cdc.ChunkId;
 import org.apache.cassandra.cdc.MutationCDCInfo;
 import org.apache.cassandra.cdc.producers.files.AvroFileTableWriter;
 import org.apache.cassandra.db.Mutation;
@@ -60,6 +63,11 @@ public class AvroCDCProducer implements CDCProducer
         }
 
         return CompletableFuture.allOf(futures);
+    }
+
+    public CompletableFuture<Void> storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer)
+    {
+        throw new RuntimeException("Not implemented");
     }
 
     public void close() throws Exception
