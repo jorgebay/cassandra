@@ -17,9 +17,15 @@
  */
 package org.apache.cassandra.cdc;
 
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputPlus;
+
 /**
- * For CDC producers that support internode replication, it represents an identifier for a chunk to be replicated.
+ * Represents serializer of {@link Chunk} instances for producers that support internode replication.
  */
-public interface ChunkId
+public interface ChunkSerializer
 {
+    Chunk deserialize(DataInputPlus in);
+
+    void serialize(Chunk m, DataOutputPlus out);
 }

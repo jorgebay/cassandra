@@ -17,19 +17,23 @@
  */
 package org.apache.cassandra.cdc.producers;
 
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.cassandra.cdc.CDCChunkMessage;
 import org.apache.cassandra.cdc.CDCProducer;
-import org.apache.cassandra.cdc.ChunkId;
+import org.apache.cassandra.cdc.Chunk;
+import org.apache.cassandra.cdc.ChunkSerializer;
 import org.apache.cassandra.cdc.MutationCDCInfo;
 import org.apache.cassandra.cdc.producers.files.AvroFileTableWriter;
+import org.apache.cassandra.cdc.producers.files.SegmentChunk;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.metrics.MetricNameFactory;
+
+import static java.lang.String.format;
 
 /**
  * The Avro CDC Producer writes segments per table, using Avro Object Container Files.
@@ -65,11 +69,27 @@ public class AvroCDCProducer implements CDCProducer
         return CompletableFuture.allOf(futures);
     }
 
-    public CompletableFuture<Void> storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer)
+    @Override
+    public CompletableFuture<Void> storeAsReplica(UUID leaderHostId, Chunk chunk)
     {
+        if (!(chunk instanceof SegmentChunk))
+        {
+            CompletableFuture<Void> c = new CompletableFuture<>();
+            c.completeExceptionally(
+                new IllegalArgumentException(format("Expected SegmentChunk but obtained '%s'", chunk.getClass())));
+            return c;
+        }
+
         throw new RuntimeException("Not implemented");
     }
 
+    @Override
+    public ChunkSerializer getChunkSerializer()
+    {
+        return SegmentChunk.serializer;
+    }
+
+    @Override
     public void close() throws Exception
     {
         writer.close();

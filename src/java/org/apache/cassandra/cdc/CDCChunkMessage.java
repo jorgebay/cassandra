@@ -18,7 +18,6 @@
 package org.apache.cassandra.cdc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.UUID;
 
 import org.apache.cassandra.io.IVersionedSerializer;
@@ -32,14 +31,12 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 public class CDCChunkMessage
 {
     private final UUID leaderHostId;
-    private final ChunkId chunkId;
-    private final ByteBuffer buffer;
+    private final Chunk chunk;
 
-    public CDCChunkMessage(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer)
+    public CDCChunkMessage(UUID leaderHostId, Chunk chunk)
     {
         this.leaderHostId = leaderHostId;
-        this.chunkId = chunkId;
-        this.buffer = buffer;
+        this.chunk = chunk;
     }
 
     public static final CDCChunkMessageSerializer serializer = new CDCChunkMessageSerializer();
@@ -49,14 +46,9 @@ public class CDCChunkMessage
         return leaderHostId;
     }
 
-    public ChunkId getChunkId()
+    public Chunk getChunk()
     {
-        return chunkId;
-    }
-
-    public ByteBuffer getBuffer()
-    {
-        return buffer;
+        return chunk;
     }
 
     public static class CDCChunkMessageSerializer implements IVersionedSerializer<CDCChunkMessage>

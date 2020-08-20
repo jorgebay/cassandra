@@ -18,7 +18,6 @@
 package org.apache.cassandra.cdc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -31,7 +30,6 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cdc.producers.AvroCDCProducer;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.CDCWriteException;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -181,9 +179,9 @@ public final class CDCService implements CDCServiceMBean
     }
 
     @Override
-    public void storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer) throws CDCWriteException
+    public void storeAsReplica(UUID leaderHostId, Chunk chunk) throws CDCWriteException
     {
-        CompletableFuture<Void> future = this.producer.storeAsReplica(leaderHostId, chunkId, buffer);
+        CompletableFuture<Void> future = this.producer.storeAsReplica(leaderHostId, chunk);
         try
         {
             future.get();

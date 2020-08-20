@@ -18,7 +18,6 @@
 package org.apache.cassandra.cdc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.UUID;
 
 import org.apache.cassandra.db.Mutation;
@@ -41,7 +40,7 @@ public interface CDCServiceMBean
      */
     void delegatePublishing(InetAddressAndPort leader, Mutation mutation) throws CDCWriteException;
 
-    void storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer) throws CDCWriteException;
+    void storeAsReplica(UUID leaderHostId, Chunk chunk) throws CDCWriteException;
 
     void shutdown();
 }

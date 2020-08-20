@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.cdc;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -44,5 +43,14 @@ public interface CDCProducer extends AutoCloseable
      */
     CompletableFuture<Void> send(Mutation mutation, MutationCDCInfo info);
 
-    CompletableFuture<Void> storeAsReplica(UUID leaderHostId, ChunkId chunkId, ByteBuffer buffer);
+    /**
+     * When supported, it saves a chunk from another node that is acting as leader of the data.
+     */
+    CompletableFuture<Void> storeAsReplica(UUID leaderHostId, Chunk chunk);
+
+    /**
+     * When supported, it returns the instance used to serialize and deserialize chunks for replication.
+     * @return The instance when supported, otherwise {@code null}.
+     */
+    ChunkSerializer getChunkSerializer();
 }

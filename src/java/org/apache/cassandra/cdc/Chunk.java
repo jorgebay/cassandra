@@ -15,11 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.cdc.producers.files;
+package org.apache.cassandra.cdc;
 
-import org.apache.cassandra.cdc.ChunkId;
-
-class SegmentId implements ChunkId
+/**
+ * For CDC producers that support internode replication, it represents a group of data to be replicated.
+ */
+public interface Chunk
 {
-
 }

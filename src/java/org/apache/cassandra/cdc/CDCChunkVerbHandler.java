@@ -20,8 +20,6 @@ package org.apache.cassandra.cdc;
 import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
@@ -42,13 +40,12 @@ public class CDCChunkVerbHandler implements IVerbHandler<CDCChunkMessage>
         this(CDCService.instance);
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(CDCChunkVerbHandler.class);
-
+    @Override
     public void doVerb(Message<CDCChunkMessage> message) throws IOException
     {
         this.service.storeAsReplica(message.payload.getLeaderHostId(),
-                                    message.payload.getChunkId(),
-                                    message.payload.getBuffer());
+                                    message.payload.getChunk()
+        );
 
         //TODO: Handle exceptions and send response
     }
