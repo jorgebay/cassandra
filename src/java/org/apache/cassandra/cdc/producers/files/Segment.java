@@ -41,12 +41,16 @@ class Segment
     private final AtomicInteger allocating = new AtomicInteger();
     private final ByteBuffer buffer;
     private final int maxLength;
+    private final SegmentId id;
+
     private int pollPosition;
 
     public Segment(int maxLength)
     {
         this.buffer = ByteBuffer.allocate(maxLength);
         this.maxLength = maxLength;
+        //TODO: define a way to uniquely identify a segment
+        this.id = new SegmentId();
     }
 
     /**
@@ -56,6 +60,11 @@ class Segment
     public FileChannel getChannel()
     {
         throw new RuntimeException("Not implemented");
+    }
+
+    public SegmentId getId()
+    {
+        return id;
     }
 
     private enum State
@@ -163,6 +172,11 @@ class Segment
     Map<Integer, FileSegmentAllocation> getAllocationPositions()
     {
         return allocations;
+    }
+
+    static class SegmentId
+    {
+
     }
 
     /**

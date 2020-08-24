@@ -21,7 +21,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiConsumer;
 
 import org.apache.cassandra.cdc.producers.files.Segment.SegmentSubrange;
 import org.apache.cassandra.schema.TableId;
@@ -33,13 +32,18 @@ import org.apache.cassandra.utils.SyncUtil;
 class Flusher
 {
     private final ConcurrentHashMap<TableId, TableSegmentManager> segmentManager;
-    private final BiConsumer<VersionedSegmentManager, ByteBuffer> onChunkFlushed;
+    private final OnChunkFlushed onChunkFlushed;
 
-    Flusher(ConcurrentHashMap<TableId, TableSegmentManager> segmentManager,
-            BiConsumer<VersionedSegmentManager, ByteBuffer> onChunkFlushed)
+    Flusher(ConcurrentHashMap<TableId, TableSegmentManager> segmentManager, OnChunkFlushed onChunkFlushed)
     {
         this.segmentManager = segmentManager;
         this.onChunkFlushed = onChunkFlushed;
+    }
+
+    @FunctionalInterface
+    interface OnChunkFlushed
+    {
+        void accept(Segment segment, Collection<FileSegmentAllocation> allocations, ByteBuffer buffer);
     }
 
     @SuppressWarnings("resource")
@@ -82,7 +86,7 @@ class Flusher
 
                     if (writeException == null)
                     {
-                        onChunkFlushed.accept(tableVersion, (ByteBuffer) compressedBuffer.flip());
+                        onChunkFlushed.accept(s, subrange.getAllocations(), (ByteBuffer) compressedBuffer.flip());
                     }
                 }
             }

@@ -27,5 +27,5 @@ public interface ChunkSerializer
 {
     Chunk deserialize(DataInputPlus in);
 
-    void serialize(Chunk m, DataOutputPlus out);
+    void serialize(Chunk chunk, DataOutputPlus out);
 }

@@ -23,6 +23,7 @@ import java.util.UUID;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.utils.UUIDSerializer;
 
 /**
  * For CDC producers that support it (namely {@link org.apache.cassandra.cdc.producers.AvroCDCProducer}), it represents
@@ -55,7 +56,9 @@ public class CDCChunkMessage
     {
         public void serialize(CDCChunkMessage m, DataOutputPlus out, int version) throws IOException
         {
-            throw new RuntimeException("Not implemented");
+            UUIDSerializer.serializer.serialize(m.getLeaderHostId(), out, version);
+            ChunkSerializer chunkSerializer = CDCService.instance.getChunkSerializer();
+            chunkSerializer.serialize(m.getChunk(), out);
         }
 
         public CDCChunkMessage deserialize(DataInputPlus in, int version) throws IOException

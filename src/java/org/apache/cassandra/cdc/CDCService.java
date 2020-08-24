@@ -198,6 +198,12 @@ public final class CDCService implements CDCServiceMBean
         }
     }
 
+    @Override
+    public ChunkSerializer getChunkSerializer()
+    {
+        return this.producer.getChunkSerializer();
+    }
+
     private Exception sendToProducer(Mutation mutation) {
         final long start = System.nanoTime();
         CDCServiceMetrics.producerMessagesInFlight.inc();

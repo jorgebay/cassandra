@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 
 import org.apache.cassandra.cdc.Chunk;
 import org.apache.cassandra.cdc.ChunkSerializer;
+import org.apache.cassandra.cdc.producers.files.Segment.SegmentId;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 
@@ -50,19 +51,16 @@ public class SegmentChunk implements Chunk
         return segmentId;
     }
 
-    static class SegmentId
-    {
-
-    }
-
     static class Serializer implements ChunkSerializer
     {
+        @Override
         public Chunk deserialize(DataInputPlus in)
         {
             throw new RuntimeException("Not implemented");
         }
 
-        public void serialize(Chunk m, DataOutputPlus out)
+        @Override
+        public void serialize(Chunk chunk, DataOutputPlus out)
         {
             throw new RuntimeException("Not implemented");
         }

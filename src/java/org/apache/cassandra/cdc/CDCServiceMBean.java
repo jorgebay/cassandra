@@ -42,5 +42,11 @@ public interface CDCServiceMBean
 
     void storeAsReplica(UUID leaderHostId, Chunk chunk) throws CDCWriteException;
 
+    /**
+     * When supported, it returns the instance used to serialize and deserialize chunks for replication.
+     * @return The instance when supported, otherwise {@code null}.
+     */
+    ChunkSerializer getChunkSerializer();
+
     void shutdown();
 }

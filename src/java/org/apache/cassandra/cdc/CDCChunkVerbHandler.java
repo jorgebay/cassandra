@@ -17,12 +17,11 @@
  */
 package org.apache.cassandra.cdc;
 
-import java.io.IOException;
-
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
+import org.apache.cassandra.net.MessagingService;
 
 public class CDCChunkVerbHandler implements IVerbHandler<CDCChunkMessage>
 {
@@ -41,12 +40,9 @@ public class CDCChunkVerbHandler implements IVerbHandler<CDCChunkMessage>
     }
 
     @Override
-    public void doVerb(Message<CDCChunkMessage> message) throws IOException
+    public void doVerb(Message<CDCChunkMessage> message)
     {
-        this.service.storeAsReplica(message.payload.getLeaderHostId(),
-                                    message.payload.getChunk()
-        );
-
-        //TODO: Handle exceptions and send response
+        this.service.storeAsReplica(message.payload.getLeaderHostId(), message.payload.getChunk());
+        MessagingService.instance().send(message.emptyResponse(), message.from());
     }
 }
